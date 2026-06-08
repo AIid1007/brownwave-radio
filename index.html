@@ -1,0 +1,1408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BROWNWAVE — Brown Noise Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&family=Playfair+Display:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #1a1208;
+    --surface: #211a0e;
+    --surface2: #2a2112;
+    --surface3: #332918;
+    --amber: #d4891a;
+    --amber-bright: #f0a830;
+    --amber-dim: #8a5a10;
+    --amber-glow: rgba(212, 137, 26, 0.18);
+    --amber-glow2: rgba(212, 137, 26, 0.08);
+    --text-primary: #e8c87a;
+    --text-secondary: #9a7c3a;
+    --text-dim: #5a4820;
+    --green-meter: #4adf6e;
+    --red-meter: #df4a4a;
+    --shadow-nm-out: 4px 4px 12px rgba(0,0,0,0.7), -2px -2px 8px rgba(60,40,10,0.15);
+    --shadow-nm-in: inset 3px 3px 8px rgba(0,0,0,0.6), inset -2px -2px 6px rgba(60,40,10,0.12);
+    --shadow-nm-in-active: inset 5px 5px 14px rgba(0,0,0,0.75), inset -2px -2px 6px rgba(60,40,10,0.08);
+    --border-subtle: rgba(212, 137, 26, 0.12);
+    --border-strong: rgba(212, 137, 26, 0.3);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    background-image:
+      radial-gradient(ellipse 80% 60% at 50% 0%, rgba(120,70,10,0.18) 0%, transparent 70%),
+      repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.04) 3px, rgba(0,0,0,0.04) 4px);
+  }
+
+  .radio-unit {
+    width: 100%;
+    max-width: 720px;
+    background: var(--surface);
+    border-radius: 28px;
+    padding: 2.5rem 2.5rem 2rem;
+    box-shadow:
+      8px 8px 24px rgba(0,0,0,0.8),
+      -4px -4px 16px rgba(60,40,10,0.1),
+      inset 0 1px 0 rgba(212,137,26,0.08);
+    border: 1px solid var(--border-subtle);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .radio-unit::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--amber-dim), var(--amber), var(--amber-dim), transparent);
+    opacity: 0.5;
+  }
+
+  .brand-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 0.3rem;
+  }
+
+  .brand-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 3.2rem;
+    letter-spacing: 0.12em;
+    color: var(--amber);
+    line-height: 1;
+    text-shadow: 0 0 30px rgba(212,137,26,0.4);
+  }
+
+  .brand-sub {
+    font-size: 0.62rem;
+    letter-spacing: 0.25em;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+  }
+
+  .tagline {
+    font-size: 0.6rem;
+    letter-spacing: 0.3em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 1.8rem;
+  }
+
+  /* === VISUALIZER === */
+  .viz-shell {
+    background: #0d0a05;
+    border-radius: 14px;
+    box-shadow: var(--shadow-nm-in);
+    border: 1px solid rgba(0,0,0,0.5);
+    padding: 1rem;
+    margin-bottom: 1.8rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .viz-shell::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.15) 0px, rgba(0,0,0,0.15) 1px, transparent 1px, transparent 3px);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  #waveCanvas {
+    display: block;
+    width: 100%;
+    height: 120px;
+    position: relative;
+    z-index: 0;
+  }
+
+  .viz-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.5rem;
+    font-size: 0.55rem;
+    letter-spacing: 0.2em;
+    color: var(--text-dim);
+  }
+
+  /* === FREQ DIAL SECTION === */
+  .controls-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 1.8rem;
+    align-items: center;
+    margin-bottom: 1.8rem;
+  }
+
+  /* Big play button */
+  .play-btn {
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-nm-out);
+    transition: box-shadow 0.12s, transform 0.1s;
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .play-btn:hover { box-shadow: 6px 6px 18px rgba(0,0,0,0.75), -2px -2px 8px rgba(60,40,10,0.15), 0 0 20px var(--amber-glow); }
+  .play-btn:active { box-shadow: var(--shadow-nm-in-active); transform: scale(0.97); }
+
+  .play-btn svg { width: 32px; height: 32px; }
+  .play-btn.playing .icon-play { display: none; }
+  .play-btn.playing .icon-pause { display: block; }
+  .play-btn .icon-pause { display: none; }
+
+  .play-btn-ring {
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border-strong);
+    opacity: 0.4;
+  }
+
+  /* Center freq display */
+  .freq-display {
+    background: #0d0a05;
+    border-radius: 12px;
+    box-shadow: var(--shadow-nm-in);
+    border: 1px solid rgba(0,0,0,0.4);
+    padding: 1rem 1.2rem;
+    text-align: center;
+  }
+
+  .freq-label {
+    font-size: 0.55rem;
+    letter-spacing: 0.25em;
+    color: var(--text-dim);
+    margin-bottom: 0.3rem;
+    text-transform: uppercase;
+  }
+
+  .freq-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.4rem;
+    letter-spacing: 0.1em;
+    color: var(--amber-bright);
+    text-shadow: 0 0 20px rgba(240,168,48,0.5);
+    line-height: 1;
+  }
+
+  .freq-unit {
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    margin-top: 0.2rem;
+  }
+
+  .status-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    margin-right: 6px;
+    transition: background 0.3s, box-shadow 0.3s;
+  }
+  .status-dot.active {
+    background: var(--green-meter);
+    box-shadow: 0 0 8px rgba(74,223,110,0.6);
+  }
+
+  /* Volume knob */
+  .knob-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+  }
+
+  .knob {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--surface2);
+    box-shadow: var(--shadow-nm-out);
+    cursor: grab;
+    position: relative;
+    user-select: none;
+    border: 1px solid var(--border-subtle);
+  }
+
+  .knob:active { cursor: grabbing; }
+
+  .knob-tick {
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    height: 10px;
+    background: var(--amber);
+    border-radius: 1px;
+    transform-origin: bottom center;
+    box-shadow: 0 0 6px rgba(212,137,26,0.7);
+  }
+
+  .knob-label {
+    font-size: 0.5rem;
+    letter-spacing: 0.2em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    text-align: center;
+  }
+
+  .knob-val {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    text-align: center;
+  }
+
+  /* === VU METERS === */
+  .vu-row {
+    display: flex;
+    gap: 1.2rem;
+    align-items: flex-end;
+    margin-bottom: 1.8rem;
+  }
+
+  .vu-meter {
+    flex: 1;
+    background: #0d0a05;
+    border-radius: 8px;
+    box-shadow: var(--shadow-nm-in);
+    border: 1px solid rgba(0,0,0,0.4);
+    padding: 0.6rem 0.8rem;
+  }
+
+  .vu-label {
+    font-size: 0.5rem;
+    letter-spacing: 0.2em;
+    color: var(--text-dim);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+  }
+
+  .vu-bar-track {
+    height: 10px;
+    background: rgba(0,0,0,0.4);
+    border-radius: 5px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .vu-bar-fill {
+    height: 100%;
+    border-radius: 5px;
+    transition: width 0.05s linear;
+    background: linear-gradient(90deg, #4adf6e 0%, #d4df4a 70%, #df4a4a 100%);
+    width: 0%;
+  }
+
+  /* === SLIDERS === */
+  .sliders-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1.8rem;
+  }
+
+  .slider-block {
+    background: var(--surface2);
+    border-radius: 12px;
+    box-shadow: var(--shadow-nm-out);
+    border: 1px solid var(--border-subtle);
+    padding: 0.9rem 1rem;
+  }
+
+  .slider-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.6rem;
+  }
+
+  .slider-name {
+    font-size: 0.55rem;
+    letter-spacing: 0.2em;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+  }
+
+  .slider-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--amber);
+  }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: #0d0a05;
+    outline: none;
+    box-shadow: inset 1px 1px 3px rgba(0,0,0,0.7);
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--surface3);
+    cursor: pointer;
+    box-shadow: 2px 2px 6px rgba(0,0,0,0.6), -1px -1px 3px rgba(60,40,10,0.1);
+    border: 1px solid var(--border-strong);
+    transition: box-shadow 0.1s;
+  }
+
+  input[type=range]::-webkit-slider-thumb:hover {
+    box-shadow: 2px 2px 8px rgba(0,0,0,0.7), 0 0 10px var(--amber-glow);
+  }
+
+  /* === TOGGLE BUTTONS === */
+  .toggles-row {
+    display: flex;
+    gap: 0.8rem;
+    margin-bottom: 1.8rem;
+    flex-wrap: wrap;
+  }
+
+  .toggle-btn {
+    flex: 1;
+    min-width: 120px;
+    padding: 0.6rem 0.8rem;
+    background: var(--surface2);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    cursor: pointer;
+    box-shadow: var(--shadow-nm-out);
+    transition: all 0.15s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .toggle-btn:hover { box-shadow: 4px 4px 14px rgba(0,0,0,0.7), -2px -2px 8px rgba(60,40,10,0.12), 0 0 12px var(--amber-glow2); }
+
+  .toggle-btn.on {
+    box-shadow: var(--shadow-nm-in);
+    border-color: var(--amber-dim);
+    background: #1e1408;
+  }
+
+  .toggle-icon {
+    font-size: 1.2rem;
+    color: var(--text-dim);
+    transition: color 0.15s;
+  }
+
+  .toggle-btn.on .toggle-icon { color: var(--amber); text-shadow: 0 0 10px rgba(212,137,26,0.6); }
+
+  .toggle-name {
+    font-size: 0.52rem;
+    letter-spacing: 0.18em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    transition: color 0.15s;
+  }
+
+  .toggle-btn.on .toggle-name { color: var(--text-secondary); }
+
+  /* === SLEEP TIMER === */
+  .timer-row {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.8rem 1rem;
+    background: var(--surface2);
+    border-radius: 10px;
+    box-shadow: var(--shadow-nm-in);
+    border: 1px solid rgba(0,0,0,0.3);
+    margin-bottom: 1.5rem;
+  }
+
+  .timer-label {
+    font-size: 0.55rem;
+    letter-spacing: 0.2em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .timer-btns {
+    display: flex;
+    gap: 0.5rem;
+    flex: 1;
+  }
+
+  .timer-pill {
+    flex: 1;
+    padding: 0.35rem 0.5rem;
+    background: var(--surface3);
+    border: 1px solid var(--border-subtle);
+    border-radius: 20px;
+    cursor: pointer;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    text-align: center;
+    box-shadow: 2px 2px 6px rgba(0,0,0,0.5), -1px -1px 4px rgba(60,40,10,0.08);
+    transition: all 0.12s;
+    letter-spacing: 0.1em;
+  }
+
+  .timer-pill:hover { color: var(--text-secondary); }
+
+  .timer-pill.active {
+    background: #1a1208;
+    box-shadow: inset 2px 2px 5px rgba(0,0,0,0.6);
+    color: var(--amber);
+    border-color: var(--amber-dim);
+  }
+
+  .timer-countdown {
+    font-size: 0.65rem;
+    color: var(--amber);
+    letter-spacing: 0.1em;
+    min-width: 40px;
+    text-align: right;
+  }
+
+  /* === BOTTOM STATUS BAR === */
+  .status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-subtle);
+    font-size: 0.52rem;
+    letter-spacing: 0.18em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+
+  /* scan line animation */
+  @keyframes scanline {
+    0% { transform: translateY(-100%); }
+    100% { transform: translateY(100%); }
+  }
+
+  .playing-pulse {
+    animation: none;
+  }
+
+  @keyframes glowPulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+
+  /* === CABIN MODE === */
+  .cabin-section {
+    margin-bottom: 1.8rem;
+    border-radius: 14px;
+    border: 1px solid var(--border-subtle);
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+
+  .cabin-section.cabin-active {
+    border-color: rgba(100, 180, 220, 0.35);
+    box-shadow: 0 0 20px rgba(80,160,200,0.08);
+  }
+
+  .cabin-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.9rem 1.2rem;
+    background: var(--surface2);
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s;
+  }
+
+  .cabin-header:hover { background: var(--surface3); }
+
+  .cabin-section.cabin-active .cabin-header {
+    background: #0e1a20;
+  }
+
+  .cabin-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    box-shadow: none;
+    transition: background 0.3s, box-shadow 0.3s;
+    flex-shrink: 0;
+  }
+
+  .cabin-section.cabin-active .cabin-indicator {
+    background: #5bc8e8;
+    box-shadow: 0 0 10px rgba(91,200,232,0.7);
+  }
+
+  .cabin-title-block { flex: 1; }
+
+  .cabin-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 0.18em;
+    color: var(--text-secondary);
+    transition: color 0.3s;
+    line-height: 1.1;
+  }
+
+  .cabin-section.cabin-active .cabin-title { color: #5bc8e8; }
+
+  .cabin-desc {
+    font-size: 0.52rem;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-top: 0.15rem;
+  }
+
+  .cabin-badge {
+    font-size: 0.5rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    padding: 0.2rem 0.6rem;
+    border-radius: 20px;
+    border: 1px solid rgba(91,200,232,0.2);
+    color: var(--text-dim);
+    transition: all 0.3s;
+  }
+
+  .cabin-section.cabin-active .cabin-badge {
+    background: rgba(91,200,232,0.1);
+    border-color: rgba(91,200,232,0.4);
+    color: #5bc8e8;
+  }
+
+  .cabin-body {
+    padding: 1rem 1.2rem 1.2rem;
+    background: #0e1218;
+    border-top: 1px solid rgba(0,0,0,0.4);
+    display: none;
+  }
+
+  .cabin-section.cabin-active .cabin-body { display: block; }
+
+  .cabin-sliders {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-top: 0.8rem;
+  }
+
+  .cabin-slider-block {
+    background: #0a0f14;
+    border-radius: 10px;
+    padding: 0.8rem 1rem;
+    border: 1px solid rgba(91,200,232,0.08);
+    box-shadow: inset 2px 2px 6px rgba(0,0,0,0.5);
+  }
+
+  .cabin-note {
+    font-size: 0.55rem;
+    letter-spacing: 0.15em;
+    color: #3a7a90;
+    text-transform: uppercase;
+    line-height: 1.6;
+    margin-bottom: 0.8rem;
+  }
+
+  input[type=range].cabin-range::-webkit-slider-thumb {
+    background: #1a3a48;
+    border-color: rgba(91,200,232,0.4);
+  }
+
+  input[type=range].cabin-range::-webkit-slider-thumb:hover {
+    box-shadow: 2px 2px 8px rgba(0,0,0,0.7), 0 0 10px rgba(91,200,232,0.25);
+  }
+
+  .cabin-val { color: #5bc8e8 !important; }
+</style>
+</head>
+<body>
+
+<main class="radio-unit" role="main">
+  <h1 class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);">BROWNWAVE — Brown Noise Generator</h1>
+
+  <div class="brand-row">
+    <div class="brand-name">BROWNWAVE</div>
+    <div class="brand-sub">Model B-1 &nbsp;·&nbsp; Series IV</div>
+  </div>
+  <div class="tagline">High-Fidelity Brown Noise Generator &nbsp;·&nbsp; Precision Audio</div>
+
+  <!-- WAVEFORM VISUALIZER -->
+  <div class="viz-shell">
+    <canvas id="waveCanvas" width="660" height="120"></canvas>
+    <div class="viz-labels">
+      <span>WAVEFORM MONITOR</span>
+      <span id="vizStatus">STANDBY</span>
+      <span>&#9632; MONO</span>
+    </div>
+  </div>
+
+  <!-- MAIN CONTROLS ROW -->
+  <div class="controls-row">
+    <button class="play-btn" id="playBtn" aria-label="Play / Pause">
+      <div class="play-btn-ring"></div>
+      <svg class="icon-play" viewBox="0 0 24 24" fill="var(--amber)" aria-hidden="true">
+        <polygon points="7,4 21,12 7,20" />
+      </svg>
+      <svg class="icon-pause" viewBox="0 0 24 24" fill="var(--amber)" aria-hidden="true">
+        <rect x="5" y="4" width="4" height="16" rx="1.5"/>
+        <rect x="15" y="4" width="4" height="16" rx="1.5"/>
+      </svg>
+    </button>
+
+    <div class="freq-display">
+      <div class="freq-label"><span class="status-dot" id="statusDot"></span>Signal Status</div>
+      <div class="freq-value" id="freqDisp">20 – 200</div>
+      <div class="freq-unit">Hz &nbsp;·&nbsp; Brown Noise</div>
+    </div>
+
+    <div class="knob-wrap">
+      <div class="knob" id="volKnob" role="slider" aria-label="Volume" aria-valuenow="80" aria-valuemin="0" aria-valuemax="100" tabindex="0">
+        <div class="knob-tick" id="volTick"></div>
+      </div>
+      <div class="knob-val" id="volVal">80%</div>
+      <div class="knob-label">Volume</div>
+    </div>
+  </div>
+
+  <!-- VU METERS -->
+  <div class="vu-row">
+    <div class="vu-meter">
+      <div class="vu-label">L — Output Level</div>
+      <div class="vu-bar-track"><div class="vu-bar-fill" id="vuLeft"></div></div>
+    </div>
+    <div class="vu-meter">
+      <div class="vu-label">R — Output Level</div>
+      <div class="vu-bar-track"><div class="vu-bar-fill" id="vuRight"></div></div>
+    </div>
+  </div>
+
+  <!-- SLIDERS -->
+  <div class="sliders-section">
+    <div class="slider-block">
+      <div class="slider-header">
+        <span class="slider-name">Texture</span>
+        <span class="slider-val" id="textureVal">50%</span>
+      </div>
+      <input type="range" id="textureSlider" min="0" max="100" value="50" step="1" aria-label="Noise texture">
+    </div>
+    <div class="slider-block">
+      <div class="slider-header">
+        <span class="slider-name">Low Bass</span>
+        <span class="slider-val" id="bassVal">0 dB</span>
+      </div>
+      <input type="range" id="bassSlider" min="-12" max="12" value="0" step="1" aria-label="Bass boost">
+    </div>
+    <div class="slider-block">
+      <div class="slider-header">
+        <span class="slider-name">Mid Warmth</span>
+        <span class="slider-val" id="midVal">0 dB</span>
+      </div>
+      <input type="range" id="midSlider" min="-12" max="12" value="0" step="1" aria-label="Mid warmth">
+    </div>
+    <div class="slider-block">
+      <div class="slider-header">
+        <span class="slider-name">Fade Speed</span>
+        <span class="slider-val" id="fadeVal">1.0s</span>
+      </div>
+      <input type="range" id="fadeSlider" min="1" max="30" value="10" step="1" aria-label="Fade duration">
+    </div>
+  </div>
+
+  <!-- TOGGLES -->
+  <div class="toggles-row">
+    <button class="toggle-btn" id="toggleBassBoost" aria-pressed="false">
+      <span class="toggle-icon">◈</span>
+      <span class="toggle-name">Bass Boost</span>
+    </button>
+    <button class="toggle-btn" id="toggleStereo" aria-pressed="false">
+      <span class="toggle-icon">⊕</span>
+      <span class="toggle-name">Stereo Width</span>
+    </button>
+    <button class="toggle-btn" id="toggleFilter" aria-pressed="false">
+      <span class="toggle-icon">◇</span>
+      <span class="toggle-name">Deep Low-pass</span>
+    </button>
+    <button class="toggle-btn" id="toggleBrighter" aria-pressed="false">
+      <span class="toggle-icon">◎</span>
+      <span class="toggle-name">Air Shelf</span>
+    </button>
+  </div>
+
+  <!-- CABIN MODE -->
+  <div class="cabin-section" id="cabinSection">
+    <div class="cabin-header" id="cabinToggle" role="button" tabindex="0" aria-pressed="false" aria-label="Toggle Cabin Mode">
+      <div class="cabin-indicator"></div>
+      <div class="cabin-title-block">
+        <div class="cabin-title">✈ Cabin Mode</div>
+        <div class="cabin-desc">Airplane-grade smooth · Ultra-low distortion · Effortless</div>
+      </div>
+      <div class="cabin-badge" id="cabinBadgeLabel">OFF</div>
+    </div>
+    <div class="cabin-body">
+      <div class="cabin-note">
+        Triple-cascaded low-pass filtering + dynamic compression eliminates all mid/high harshness —
+        leaving only the deep, pressurized rumble of cruising altitude.
+      </div>
+      <div class="cabin-sliders">
+        <div class="cabin-slider-block">
+          <div class="slider-header">
+            <span class="slider-name" style="color:#3a7a90">Smoothness</span>
+            <span class="slider-val cabin-val" id="cabinSmoothVal">80%</span>
+          </div>
+          <input type="range" id="cabinSmoothSlider" class="cabin-range" min="0" max="100" value="80" step="1" aria-label="Cabin smoothness">
+        </div>
+        <div class="cabin-slider-block">
+          <div class="slider-header">
+            <span class="slider-name" style="color:#3a7a90">Rumble Depth</span>
+            <span class="slider-val cabin-val" id="cabinDepthVal">60%</span>
+          </div>
+          <input type="range" id="cabinDepthSlider" class="cabin-range" min="0" max="100" value="60" step="1" aria-label="Cabin rumble depth">
+        </div>
+        <div class="cabin-slider-block">
+          <div class="slider-header">
+            <span class="slider-name" style="color:#3a7a90">Pressure Feel</span>
+            <span class="slider-val cabin-val" id="cabinPressureVal">50%</span>
+          </div>
+          <input type="range" id="cabinPressureSlider" class="cabin-range" min="0" max="100" value="50" step="1" aria-label="Cabin pressure feel">
+        </div>
+        <div class="cabin-slider-block">
+          <div class="slider-header">
+            <span class="slider-name" style="color:#3a7a90">Blend</span>
+            <span class="slider-val cabin-val" id="cabinBlendVal">100%</span>
+          </div>
+          <input type="range" id="cabinBlendSlider" class="cabin-range" min="0" max="100" value="100" step="1" aria-label="Cabin blend">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLEEP TIMER -->
+  <div class="timer-row">
+    <div class="timer-label">Sleep Timer</div>
+    <div class="timer-btns">
+      <button class="timer-pill" data-mins="15">15m</button>
+      <button class="timer-pill" data-mins="30">30m</button>
+      <button class="timer-pill" data-mins="60">60m</button>
+      <button class="timer-pill" data-mins="90">90m</button>
+      <button class="timer-pill" data-mins="0">Off</button>
+    </div>
+    <div class="timer-countdown" id="timerDisplay">—</div>
+  </div>
+
+  <!-- STATUS BAR -->
+  <div class="status-bar">
+    <span id="elapsedLabel">Elapsed: 00:00:00</span>
+    <span>Brownian Motion &nbsp;·&nbsp; 44.1 kHz</span>
+    <span id="stateLabel">Offline</span>
+  </div>
+</main>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ========= AUDIO ENGINE ========= */
+  let ctx = null;
+  let gainNode = null;
+  let masterGain = null;
+  let bassFilter = null;
+  let midFilter = null;
+  let highFilter = null;
+  let lpFilter = null;
+  let scriptNode = null;
+  let analyserL = null;
+  let analyserR = null;
+  let isPlaying = false;
+
+  let volume = 0.8;
+  let textureAmt = 0.5; // controls brown noise smoothing
+  let bassGainDb = 0;
+  let midGainDb = 0;
+  let fadeSecs = 1.0;
+
+  // Brown noise state (per channel)
+  let b0L=0,b1L=0,b2L=0,b3L=0,b4L=0,b5L=0,b6L=0;
+  let b0R=0,b1R=0,b2R=0,b3R=0,b4R=0,b5R=0,b6R=0;
+
+  // Feature toggles
+  const toggleState = {
+    bassBoost: false,
+    stereo: false,
+    filter: false,
+    brighter: false,
+    cabin: false
+  };
+
+  // Cabin mode state
+  let cabinSmooth = 0.80;
+  let cabinDepth = 0.60;
+  let cabinPressure = 0.50;
+  let cabinBlend = 1.0;
+
+  // Cabin IIR integrator state (very heavy smoothing — 4 stages per channel)
+  let cA0L=0,cA1L=0,cA2L=0,cA3L=0;
+  let cA0R=0,cA1R=0,cA2R=0,cA3R=0;
+
+  // Cabin compressor and extra filters
+  let cabinLP1 = null, cabinLP2 = null, cabinLP3 = null;
+  let cabinCompressor = null;
+  let cabinGain = null;
+  let cabinBypassGain = null; // for blending
+
+  function initAudio() {
+    if (ctx) return;
+    ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+
+    // Master gain (for fade)
+    masterGain = ctx.createGain();
+    masterGain.gain.value = 0;
+
+    // Channel gain
+    gainNode = ctx.createGain();
+    gainNode.gain.value = volume;
+
+    // EQ chain
+    bassFilter = ctx.createBiquadFilter();
+    bassFilter.type = 'lowshelf';
+    bassFilter.frequency.value = 120;
+    bassFilter.gain.value = 0;
+
+    midFilter = ctx.createBiquadFilter();
+    midFilter.type = 'peaking';
+    midFilter.frequency.value = 400;
+    midFilter.Q.value = 0.8;
+    midFilter.gain.value = 0;
+
+    highFilter = ctx.createBiquadFilter();
+    highFilter.type = 'highshelf';
+    highFilter.frequency.value = 8000;
+    highFilter.gain.value = 0;
+
+    lpFilter = ctx.createBiquadFilter();
+    lpFilter.type = 'lowpass';
+    lpFilter.frequency.value = 20000;
+    lpFilter.Q.value = 0.5;
+
+    // Cabin mode filters (triple cascaded LP + compressor)
+    cabinLP1 = ctx.createBiquadFilter();
+    cabinLP1.type = 'lowpass';
+    cabinLP1.frequency.value = 20000; // starts bypassed
+    cabinLP1.Q.value = 0.5;
+
+    cabinLP2 = ctx.createBiquadFilter();
+    cabinLP2.type = 'lowpass';
+    cabinLP2.frequency.value = 20000;
+    cabinLP2.Q.value = 0.5;
+
+    cabinLP3 = ctx.createBiquadFilter();
+    cabinLP3.type = 'lowpass';
+    cabinLP3.frequency.value = 20000;
+    cabinLP3.Q.value = 0.5;
+
+    cabinCompressor = ctx.createDynamicsCompressor();
+    cabinCompressor.threshold.value = -24;
+    cabinCompressor.knee.value = 30;
+    cabinCompressor.ratio.value = 2;
+    cabinCompressor.attack.value = 0.1;
+    cabinCompressor.release.value = 0.5;
+
+    cabinGain = ctx.createGain();
+    cabinGain.gain.value = 1.0;
+
+    // Analysers
+    analyserL = ctx.createAnalyser();
+    analyserL.fftSize = 512;
+    analyserL.smoothingTimeConstant = 0.75;
+    analyserR = ctx.createAnalyser();
+    analyserR.fftSize = 512;
+    analyserR.smoothingTimeConstant = 0.75;
+
+    // ScriptProcessor for brown noise generation
+    const bufSize = 4096;
+    scriptNode = ctx.createScriptProcessor(bufSize, 0, 2);
+
+    scriptNode.onaudioprocess = function(e) {
+      const outL = e.outputBuffer.getChannelData(0);
+      const outR = e.outputBuffer.getChannelData(1);
+
+      if (toggleState.cabin) {
+        // CABIN MODE: deep IIR integrator — 4-stage cascaded integration
+        // This creates an ultra-smooth, very low frequency brown noise
+        const alpha = 0.92 + cabinSmooth * 0.075; // 0.92–0.995
+        const depthGain = 1.8 + cabinDepth * 2.5;
+        const pressureBoost = 1.0 + cabinPressure * 0.8;
+
+        for (let i = 0; i < bufSize; i++) {
+          const wL = (Math.random() * 2 - 1) * 0.15;
+          const wR = toggleState.stereo ? (Math.random() * 2 - 1) * 0.15 : wL;
+
+          // 4-stage IIR integration (each stage is a leaky integrator)
+          cA0L = alpha * cA0L + (1 - alpha) * wL;
+          cA1L = alpha * cA1L + (1 - alpha) * cA0L;
+          cA2L = alpha * cA2L + (1 - alpha) * cA1L;
+          cA3L = alpha * cA3L + (1 - alpha) * cA2L;
+
+          cA0R = alpha * cA0R + (1 - alpha) * wR;
+          cA1R = alpha * cA1R + (1 - alpha) * cA0R;
+          cA2R = alpha * cA2R + (1 - alpha) * cA1R;
+          cA3R = alpha * cA3R + (1 - alpha) * cA2R;
+
+          const rawL = cA3L * depthGain * pressureBoost;
+          const rawR = cA3R * depthGain * pressureBoost;
+
+          // Blend with regular brown noise if blend < 100%
+          if (cabinBlend < 1.0) {
+            const bSmooth = 0.5 + textureAmt * 0.45;
+            const bGain = 3.5 - textureAmt * 1.5;
+            b0L = bSmooth*b0L + 0.0555179*wL*6.67; b1L = bSmooth*b1L + 0.0750759*wL*6.67;
+            b2L = 0.9860*b2L + 0.1538520*wL*6.67; b3L = 0.9900*b3L + 0.3084428*wL*6.67;
+            b4L = 0.9500*b4L + 0.5329522*wL*6.67; b5L = 0.8500*b5L + 0.0168980*wL*6.67; b6L = -0.0760*wL*6.67;
+            const normalL = (b0L+b1L+b2L+b3L+b4L+b5L+b6L) * bGain / 6.28;
+            outL[i] = rawL * cabinBlend + normalL * (1 - cabinBlend);
+            outR[i] = rawR * cabinBlend + normalL * (1 - cabinBlend);
+          } else {
+            outL[i] = rawL;
+            outR[i] = rawR;
+          }
+        }
+      } else {
+        // STANDARD MODE
+        const smooth = 0.5 + textureAmt * 0.45;
+        const gain = 3.5 - textureAmt * 1.5;
+        for (let i = 0; i < bufSize; i++) {
+          const wL = (Math.random() * 2 - 1);
+          const wR = toggleState.stereo ? (Math.random() * 2 - 1) : wL;
+          b0L = smooth*b0L + 0.0555179*wL; b1L = smooth*b1L + 0.0750759*wL;
+          b2L = 0.9860*b2L + 0.1538520*wL; b3L = 0.9900*b3L + 0.3084428*wL;
+          b4L = 0.9500*b4L + 0.5329522*wL; b5L = 0.8500*b5L + 0.0168980*wL; b6L = -0.0760*wL;
+          b0R = smooth*b0R + 0.0555179*wR; b1R = smooth*b1R + 0.0750759*wR;
+          b2R = 0.9860*b2R + 0.1538520*wR; b3R = 0.9900*b3R + 0.3084428*wR;
+          b4R = 0.9500*b4R + 0.5329522*wR; b5R = 0.8500*b5R + 0.0168980*wR; b6R = -0.0760*wR;
+          outL[i] = (b0L+b1L+b2L+b3L+b4L+b5L+b6L) * gain / 6.28;
+          outR[i] = (b0R+b1R+b2R+b3R+b4R+b5R+b6R) * gain / 6.28;
+        }
+      }
+    };
+
+    // Signal chain: scriptNode -> gainNode -> bassFilter -> midFilter -> highFilter
+    //   -> cabinLP1 -> cabinLP2 -> cabinLP3 -> cabinCompressor -> cabinGain
+    //   -> lpFilter -> masterGain -> analyser -> destination
+    scriptNode.connect(gainNode);
+    gainNode.connect(bassFilter);
+    bassFilter.connect(midFilter);
+    midFilter.connect(highFilter);
+    highFilter.connect(cabinLP1);
+    cabinLP1.connect(cabinLP2);
+    cabinLP2.connect(cabinLP3);
+    cabinLP3.connect(cabinCompressor);
+    cabinCompressor.connect(cabinGain);
+    cabinGain.connect(lpFilter);
+    lpFilter.connect(masterGain);
+    masterGain.connect(analyserL);
+    masterGain.connect(analyserR);
+    masterGain.connect(ctx.destination);
+  }
+
+  function startNoise() {
+    initAudio();
+    if (ctx.state === 'suspended') ctx.resume();
+    masterGain.gain.cancelScheduledValues(ctx.currentTime);
+    masterGain.gain.setValueAtTime(0, ctx.currentTime);
+    masterGain.gain.linearRampToValueAtTime(1, ctx.currentTime + fadeSecs);
+    isPlaying = true;
+    updateUI();
+  }
+
+  function stopNoise() {
+    if (!ctx) return;
+    masterGain.gain.cancelScheduledValues(ctx.currentTime);
+    masterGain.gain.setValueAtTime(masterGain.gain.value, ctx.currentTime);
+    masterGain.gain.linearRampToValueAtTime(0, ctx.currentTime + fadeSecs);
+    isPlaying = false;
+    updateUI();
+  }
+
+  function updateUI() {
+    const btn = document.getElementById('playBtn');
+    const dot = document.getElementById('statusDot');
+    const state = document.getElementById('stateLabel');
+    const vizSt = document.getElementById('vizStatus');
+    if (isPlaying) {
+      btn.classList.add('playing');
+      dot.classList.add('active');
+      state.textContent = 'LIVE';
+      vizSt.textContent = 'ACTIVE';
+    } else {
+      btn.classList.remove('playing');
+      dot.classList.remove('active');
+      state.textContent = 'Offline';
+      vizSt.textContent = 'STANDBY';
+    }
+  }
+
+  /* ===== PLAY BUTTON ===== */
+  document.getElementById('playBtn').addEventListener('click', () => {
+    if (isPlaying) stopNoise(); else startNoise();
+  });
+
+  /* ===== KNOB ===== */
+  const knob = document.getElementById('volKnob');
+  const tick = document.getElementById('volTick');
+  const volVal = document.getElementById('volVal');
+  let knobDragging = false, knobStartY = 0, knobStartVal = volume;
+
+  function setVolume(v) {
+    volume = Math.max(0, Math.min(1, v));
+    if (gainNode) gainNode.gain.value = volume;
+    const deg = -145 + volume * 290;
+    tick.style.transform = `translateX(-50%) rotate(${deg}deg)`;
+    tick.style.transformOrigin = '50% calc(100% + 26px)';
+    volVal.textContent = Math.round(volume * 100) + '%';
+    knob.setAttribute('aria-valuenow', Math.round(volume * 100));
+  }
+
+  knob.addEventListener('mousedown', e => { knobDragging = true; knobStartY = e.clientY; knobStartVal = volume; e.preventDefault(); });
+  knob.addEventListener('touchstart', e => { knobDragging = true; knobStartY = e.touches[0].clientY; knobStartVal = volume; }, { passive: true });
+
+  document.addEventListener('mousemove', e => {
+    if (!knobDragging) return;
+    setVolume(knobStartVal + (knobStartY - e.clientY) / 200);
+  });
+  document.addEventListener('touchmove', e => {
+    if (!knobDragging) return;
+    setVolume(knobStartVal + (knobStartY - e.touches[0].clientY) / 200);
+  }, { passive: true });
+  document.addEventListener('mouseup', () => knobDragging = false);
+  document.addEventListener('touchend', () => knobDragging = false);
+
+  knob.addEventListener('keydown', e => {
+    if (e.key === 'ArrowUp') { setVolume(volume + 0.05); e.preventDefault(); }
+    if (e.key === 'ArrowDown') { setVolume(volume - 0.05); e.preventDefault(); }
+  });
+
+  setVolume(0.8);
+
+  /* ===== SLIDERS ===== */
+  document.getElementById('textureSlider').addEventListener('input', function() {
+    textureAmt = this.value / 100;
+    document.getElementById('textureVal').textContent = this.value + '%';
+  });
+
+  document.getElementById('bassSlider').addEventListener('input', function() {
+    bassGainDb = parseInt(this.value);
+    document.getElementById('bassVal').textContent = (bassGainDb >= 0 ? '+' : '') + bassGainDb + ' dB';
+    if (bassFilter) bassFilter.gain.value = bassGainDb;
+  });
+
+  document.getElementById('midSlider').addEventListener('input', function() {
+    midGainDb = parseInt(this.value);
+    document.getElementById('midVal').textContent = (midGainDb >= 0 ? '+' : '') + midGainDb + ' dB';
+    if (midFilter) midFilter.gain.value = midGainDb;
+  });
+
+  document.getElementById('fadeSlider').addEventListener('input', function() {
+    fadeSecs = this.value / 10;
+    document.getElementById('fadeVal').textContent = fadeSecs.toFixed(1) + 's';
+  });
+
+  /* ===== TOGGLES ===== */
+  function applyToggle(id, key, fn) {
+    const btn = document.getElementById(id);
+    btn.addEventListener('click', () => {
+      toggleState[key] = !toggleState[key];
+      btn.classList.toggle('on', toggleState[key]);
+      btn.setAttribute('aria-pressed', toggleState[key]);
+      if (ctx) fn(toggleState[key]);
+    });
+  }
+
+  applyToggle('toggleBassBoost', 'bassBoost', (on) => {
+    bassFilter.gain.setTargetAtTime(on ? 8 : bassGainDb, ctx.currentTime, 0.1);
+  });
+
+  applyToggle('toggleStereo', 'stereo', () => {});
+
+  applyToggle('toggleFilter', 'filter', (on) => {
+    lpFilter.frequency.setTargetAtTime(on ? 600 : 20000, ctx.currentTime, 0.3);
+  });
+
+  applyToggle('toggleBrighter', 'brighter', (on) => {
+    highFilter.gain.setTargetAtTime(on ? 5 : 0, ctx.currentTime, 0.1);
+  });
+
+  /* ===== SLEEP TIMER ===== */
+  let sleepTimer = null;
+  let sleepRemaining = 0;
+  let sleepInterval = null;
+  const timerDisplay = document.getElementById('timerDisplay');
+
+  document.querySelectorAll('.timer-pill').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.timer-pill').forEach(b => b.classList.remove('active'));
+      clearTimeout(sleepTimer);
+      clearInterval(sleepInterval);
+
+      const mins = parseInt(this.dataset.mins);
+      if (mins === 0) {
+        timerDisplay.textContent = '—';
+        return;
+      }
+
+      this.classList.add('active');
+      sleepRemaining = mins * 60;
+      timerDisplay.textContent = fmtTimer(sleepRemaining);
+
+      sleepInterval = setInterval(() => {
+        sleepRemaining--;
+        if (sleepRemaining <= 0) {
+          clearInterval(sleepInterval);
+          timerDisplay.textContent = '00:00';
+          stopNoise();
+          document.querySelectorAll('.timer-pill').forEach(b => b.classList.remove('active'));
+        } else {
+          timerDisplay.textContent = fmtTimer(sleepRemaining);
+        }
+      }, 1000);
+    });
+  });
+
+  function fmtTimer(secs) {
+    const m = Math.floor(secs / 60), s = secs % 60;
+    return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  }
+
+  /* ===== ELAPSED TIME ===== */
+  let startTime = null;
+  let elapsedInterval = null;
+
+  function startElapsed() {
+    startTime = Date.now();
+    elapsedInterval = setInterval(() => {
+      if (!isPlaying) return;
+      const total = Math.floor((Date.now() - startTime) / 1000);
+      const h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), s = total % 60;
+      document.getElementById('elapsedLabel').textContent =
+        'Elapsed: ' + String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    }, 1000);
+  }
+
+  const origStart = startNoise.bind({});
+  const origStop = stopNoise.bind({});
+  document.getElementById('playBtn').removeEventListener('click', () => {});
+  document.getElementById('playBtn').addEventListener('click', () => {
+    if (!isPlaying) {
+      startNoise();
+      if (!startTime) startElapsed();
+    } else {
+      stopNoise();
+    }
+  });
+
+  /* ===== WAVEFORM VISUALIZER ===== */
+  const canvas = document.getElementById('waveCanvas');
+  const canvasCtx = canvas.getContext('2d');
+  let animFrame;
+  let idlePhase = 0;
+
+  function drawIdle() {
+    const W = canvas.width, H = canvas.height;
+    canvasCtx.clearRect(0, 0, W, H);
+    canvasCtx.fillStyle = '#0d0a05';
+    canvasCtx.fillRect(0, 0, W, H);
+
+    // flat line with gentle pulse
+    canvasCtx.beginPath();
+    canvasCtx.strokeStyle = 'rgba(90,72,32,0.6)';
+    canvasCtx.lineWidth = 1.5;
+    const y = H / 2;
+    for (let x = 0; x < W; x++) {
+      const noise = Math.sin(x * 0.05 + idlePhase) * 1.5;
+      if (x === 0) canvasCtx.moveTo(x, y + noise);
+      else canvasCtx.lineTo(x, y + noise);
+    }
+    canvasCtx.stroke();
+    idlePhase += 0.02;
+    animFrame = requestAnimationFrame(drawIdle);
+  }
+
+  function drawWave() {
+    if (!analyserL) { animFrame = requestAnimationFrame(drawWave); return; }
+    const W = canvas.width, H = canvas.height;
+    const bufLen = analyserL.fftSize;
+    const dataL = new Float32Array(bufLen);
+    const dataR = new Float32Array(bufLen);
+    analyserL.getFloatTimeDomainData(dataL);
+    analyserR.getFloatTimeDomainData(dataR);
+
+    canvasCtx.clearRect(0, 0, W, H);
+    canvasCtx.fillStyle = '#0d0a05';
+    canvasCtx.fillRect(0, 0, W, H);
+
+    // Grid lines
+    canvasCtx.strokeStyle = 'rgba(50,40,15,0.4)';
+    canvasCtx.lineWidth = 0.5;
+    for (let i = 1; i < 4; i++) {
+      canvasCtx.beginPath();
+      canvasCtx.moveTo(0, H * i / 4);
+      canvasCtx.lineTo(W, H * i / 4);
+      canvasCtx.stroke();
+    }
+
+    // Left channel
+    canvasCtx.beginPath();
+    canvasCtx.strokeStyle = 'rgba(212,137,26,0.85)';
+    canvasCtx.lineWidth = 1.5;
+    const sliceW = W / bufLen;
+    for (let i = 0; i < bufLen; i++) {
+      const x = i * sliceW;
+      const v = dataL[i];
+      const y = (0.5 + v * 0.45) * H;
+      if (i === 0) canvasCtx.moveTo(x, y);
+      else canvasCtx.lineTo(x, y);
+    }
+    canvasCtx.stroke();
+
+    // Right channel (if stereo)
+    if (toggleState.stereo) {
+      canvasCtx.beginPath();
+      canvasCtx.strokeStyle = 'rgba(150,90,18,0.5)';
+      canvasCtx.lineWidth = 1;
+      for (let i = 0; i < bufLen; i++) {
+        const x = i * sliceW;
+        const v = dataR[i];
+        const y = (0.5 + v * 0.45) * H;
+        if (i === 0) canvasCtx.moveTo(x, y);
+        else canvasCtx.lineTo(x, y);
+      }
+      canvasCtx.stroke();
+    }
+
+    // VU meters
+    let rmsL = 0, rmsR = 0;
+    for (let i = 0; i < bufLen; i++) { rmsL += dataL[i]*dataL[i]; rmsR += dataR[i]*dataR[i]; }
+    rmsL = Math.sqrt(rmsL/bufLen); rmsR = Math.sqrt(rmsR/bufLen);
+    document.getElementById('vuLeft').style.width = Math.min(100, rmsL * 400) + '%';
+    document.getElementById('vuRight').style.width = Math.min(100, rmsR * 400) + '%';
+
+    animFrame = requestAnimationFrame(drawWave);
+  }
+
+  function startViz() {
+    cancelAnimationFrame(animFrame);
+    drawWave();
+  }
+
+  function stopViz() {
+    cancelAnimationFrame(animFrame);
+    document.getElementById('vuLeft').style.width = '0%';
+    document.getElementById('vuRight').style.width = '0%';
+    drawIdle();
+  }
+
+  // Patch play/stop to control viz
+  const origPlayBtn = document.getElementById('playBtn');
+  origPlayBtn.removeEventListener('click', null);
+  origPlayBtn.addEventListener('click', () => {
+    if (!isPlaying) {
+      startNoise();
+      startViz();
+      if (!startTime) startElapsed();
+    } else {
+      stopNoise();
+      stopViz();
+    }
+  });
+
+  /* ===== CABIN MODE ===== */
+  function setCabinFilters(on) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const freq = on ? (300 + (1 - cabinSmooth) * 500) : 20000;
+    cabinLP1.frequency.setTargetAtTime(freq, t, 0.3);
+    cabinLP2.frequency.setTargetAtTime(freq * 0.7, t, 0.3);
+    cabinLP3.frequency.setTargetAtTime(freq * 0.5, t, 0.3);
+    cabinCompressor.ratio.setTargetAtTime(on ? (4 + cabinPressure * 8) : 2, t, 0.2);
+    cabinCompressor.threshold.setTargetAtTime(on ? -30 : -24, t, 0.2);
+    cabinGain.gain.setTargetAtTime(on ? (0.8 + cabinDepth * 0.6) : 1.0, t, 0.2);
+    document.getElementById('freqDisp').textContent = on ? '5 – 120' : '20 – 200';
+  }
+
+  const cabinToggleEl = document.getElementById('cabinToggle');
+  const cabinSectionEl = document.getElementById('cabinSection');
+
+  function toggleCabin() {
+    toggleState.cabin = !toggleState.cabin;
+    cabinSectionEl.classList.toggle('cabin-active', toggleState.cabin);
+    cabinToggleEl.setAttribute('aria-pressed', toggleState.cabin);
+    document.getElementById('cabinBadgeLabel').textContent = toggleState.cabin ? 'ON' : 'OFF';
+    if (ctx) setCabinFilters(toggleState.cabin);
+  }
+
+  cabinToggleEl.addEventListener('click', toggleCabin);
+  cabinToggleEl.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { toggleCabin(); e.preventDefault(); } });
+
+  document.getElementById('cabinSmoothSlider').addEventListener('input', function() {
+    cabinSmooth = this.value / 100;
+    document.getElementById('cabinSmoothVal').textContent = this.value + '%';
+    if (toggleState.cabin && ctx) setCabinFilters(true);
+  });
+
+  document.getElementById('cabinDepthSlider').addEventListener('input', function() {
+    cabinDepth = this.value / 100;
+    document.getElementById('cabinDepthVal').textContent = this.value + '%';
+    if (toggleState.cabin && ctx) setCabinFilters(true);
+  });
+
+  document.getElementById('cabinPressureSlider').addEventListener('input', function() {
+    cabinPressure = this.value / 100;
+    document.getElementById('cabinPressureVal').textContent = this.value + '%';
+    if (toggleState.cabin && ctx) setCabinFilters(true);
+  });
+
+  document.getElementById('cabinBlendSlider').addEventListener('input', function() {
+    cabinBlend = this.value / 100;
+    document.getElementById('cabinBlendVal').textContent = this.value + '%';
+  });
+
+  /* ===== START IDLE VIZ ===== */
+  drawIdle();
+
+})();
+</script>
+</body>
+</html>
